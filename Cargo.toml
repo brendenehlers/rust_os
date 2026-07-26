@@ -3,17 +3,28 @@ name = "blog_os"
 version = "0.1.0"
 edition = "2024"
 
+[package.metadata.bootimage]
+test-args = ["-device", "isa-debug-exit,iobase=0xf4,iosize=0x04", "-serial", "stdio", "-display", "none"]
+test-success-exit-code = 33 # (0x10 << 1) | 1
+test-timeout = 600 # seconds
+
 # tells rustanalyzer to skip checks against the test
 # and bench package targets
 [[bin]]
 name = "blog_os"
-test = false
+test = true
 bench = false
+
+[[test]]
+name = "should_panic"
+harness = false
 
 [dependencies]
 bootloader = "0.9"
 volatile = "0.2.6"
 spin = "0.5.2"
+x86_64 = "0.15.5"
+uart_16550 = "0.6.0"
 
 [dependencies.lazy_static]
 version = "1.0"
