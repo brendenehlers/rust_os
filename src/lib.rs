@@ -6,16 +6,17 @@
 
 use core::panic;
 
+pub mod gdt;
+pub mod interrupts;
+pub mod memory;
 pub mod serial;
 pub mod vga_buffer;
-pub mod interrupts;
-pub mod gdt;
 
 pub trait Testable {
     fn run(&self) -> ();
 }
 
-impl <T> Testable for T
+impl<T> Testable for T
 where
     T: Fn(),
 {
@@ -34,7 +35,6 @@ pub fn test_runner(tests: &[&dyn Testable]) {
     exit_qemu(QemuExitCode::Success);
 }
 
-
 pub fn test_panic_handler(info: &panic::PanicInfo) -> ! {
     serial_println!("[failed]\n");
     serial_println!("Error: {}\n", info);
@@ -43,8 +43,10 @@ pub fn test_panic_handler(info: &panic::PanicInfo) -> ! {
 }
 
 #[cfg(test)]
-#[unsafe(no_mangle)]
-pub extern "C" fn _start() -> ! {
+bootloader::entry_point!(test_kernel_main);
+
+#[cfg(test)]
+fn test_kernel_main(_boot_info: &'static bootloader::BootInfo) -> ! {
     init();
     test_main();
     hlt_loop();

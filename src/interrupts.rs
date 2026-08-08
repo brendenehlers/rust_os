@@ -30,13 +30,15 @@ extern "x86-interrupt" fn breakpoint_handler(stack_frame: idt::InterruptStackFra
 }
 
 extern "x86-interrupt" fn double_fault_handler(
-    stack_frame: idt::InterruptStackFrame, _error_code: u64
+    stack_frame: idt::InterruptStackFrame,
+    _error_code: u64,
 ) -> ! {
     panic!("EXCEPTION: DOUBLE_FAULT\n{:#?}", stack_frame);
 }
 
 extern "x86-interrupt" fn page_fault_handler(
-    stack_frame: idt::InterruptStackFrame, error_code: idt::PageFaultErrorCode
+    stack_frame: idt::InterruptStackFrame,
+    error_code: idt::PageFaultErrorCode,
 ) {
     use x86_64::registers::control::Cr2;
 
@@ -47,9 +49,7 @@ extern "x86-interrupt" fn page_fault_handler(
     hlt_loop();
 }
 
-extern "x86-interrupt" fn timer_interrupt_handler(
-    _stack_frame: idt::InterruptStackFrame
-) {
+extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: idt::InterruptStackFrame) {
     // print!(".");
     unsafe {
         PICS.lock()
@@ -57,30 +57,27 @@ extern "x86-interrupt" fn timer_interrupt_handler(
     }
 }
 
-extern "x86-interrupt" fn keyboard_interrupt_handler(
-    _stack_frame: idt::InterruptStackFrame,
-) {
+extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: idt::InterruptStackFrame) {
+    use pc_keyboard::{DecodedKey, Keyboard, ScancodeSet1, layouts};
     use spin::Mutex;
-    use pc_keyboard::{Keyboard, ScancodeSet1, DecodedKey, layouts};
     use x86_64::instructions::port::Port;
 
-    static KEYBOARD: Mutex<Keyboard<layouts::Us104Key, ScancodeSet1>> =
-        Mutex::new(Keyboard::new(
-            ScancodeSet1::new(),
-            layouts::Us104Key,
-            pc_keyboard::HandleControl::Ignore)
-        );
+    static KEYBOARD: Mutex<Keyboard<layouts::Us104Key, ScancodeSet1>> = Mutex::new(Keyboard::new(
+        ScancodeSet1::new(),
+        layouts::Us104Key,
+        pc_keyboard::HandleControl::Ignore,
+    ));
 
     let mut keyboard = KEYBOARD.lock();
     let mut port = Port::new(0x60);
 
     let scancode: u8 = unsafe { port.read() };
-    if let Ok(Some(key_event)) = keyboard.add_byte(scancode) {
-        if let Some(key) = keyboard.process_keyevent(key_event) {
-            match key {
-                DecodedKey::Unicode(character) => print!("{}", character),
-                DecodedKey::RawKey(key) => print!("{:?}", key),
-            }
+    if let Ok(Some(key_event)) = keyboard.add_byte(scancode)
+        && let Some(key) = keyboard.process_keyevent(key_event)
+    {
+        match key {
+            DecodedKey::Unicode(character) => print!("{}", character),
+            DecodedKey::RawKey(key) => print!("{:?}", key),
         }
     }
 

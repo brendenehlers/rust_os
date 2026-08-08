@@ -13,7 +13,10 @@ pub fn _print(args: ::core::fmt::Arguments) {
     use x86_64::instructions::interrupts;
 
     interrupts::without_interrupts(|| {
-        SERIAL1.lock().write_fmt(args).expect("failed to print to serial1")
+        SERIAL1
+            .lock()
+            .write_fmt(args)
+            .expect("failed to print to serial1")
     });
 }
 

@@ -4,8 +4,8 @@
 #![test_runner(test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
+use blog_os::{exit_qemu, serial_print, serial_println};
 use core::panic;
-use blog_os::{exit_qemu, serial_println, serial_print};
 
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() -> ! {
