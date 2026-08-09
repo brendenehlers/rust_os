@@ -6,10 +6,13 @@
 
 use core::panic;
 
-use x86_64::{
-    VirtAddr,
-    structures::paging::{self},
+extern crate alloc;
+
+use alloc::{
+    rc::{self, Rc},
+    vec,
 };
+use blog_os::allocator;
 
 mod serial;
 mod vga_buffer;
@@ -27,13 +30,25 @@ fn kernel_main(boot_info: &'static bootloader::BootInfo) -> ! {
     let mut frame_allocator =
         unsafe { memory::BootInfoFrameAllocator::init(&boot_info.memory_map) };
 
-    let page = paging::Page::containing_address(VirtAddr::new(0xdeadbeaf000));
-    memory::create_exmaple_mapping(page, &mut mapper, &mut frame_allocator);
+    allocator::init_heap(&mut mapper, &mut frame_allocator).expect("heap initialization failed");
 
-    let page_ptr: *mut u64 = page.start_address().as_mut_ptr();
-    unsafe {
-        page_ptr.offset(400).write_volatile(0x_f021_f077_f065_f04e);
+    let heap_value = alloc::boxed::Box::new(41);
+    println!("heap_value at {:p}", heap_value);
+
+    let mut vec = vec::Vec::new();
+    for i in 0..500 {
+        vec.push(i);
     }
+    println!("vec at {:p}", vec.as_slice());
+
+    let ref_counted = rc::Rc::new(vec![1, 2, 3]);
+    let clone_ref = ref_counted.clone();
+    println!(
+        "current reference count is {}",
+        Rc::strong_count(&clone_ref)
+    );
+    core::mem::drop(ref_counted);
+    println!("ref count is {} now", Rc::strong_count(&clone_ref));
 
     #[cfg(test)]
     test_main();
