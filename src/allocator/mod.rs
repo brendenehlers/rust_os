@@ -1,7 +1,13 @@
 use x86_64::structures::paging::{self, mapper};
 
+use crate::allocator::fixed_size_block::FixedSizeBlockAllocator;
+
+pub mod bump;
+pub mod fixed_size_block;
+pub mod linked_list;
+
 #[global_allocator]
-static ALLOCATOR: linked_list_allocator::LockedHeap = linked_list_allocator::LockedHeap::empty();
+static ALLOCATOR: Locked<FixedSizeBlockAllocator> = Locked::new(FixedSizeBlockAllocator::new());
 
 pub const HEAP_START: usize = 0x_4444_4444_0000;
 pub const HEAP_SIZE: usize = 100 * 1024;
@@ -33,4 +39,35 @@ pub fn init_heap(
     }
 
     Ok(())
+}
+
+pub struct Locked<A> {
+    inner: spin::Mutex<A>,
+}
+
+impl<A> Locked<A> {
+    pub const fn new(inner: A) -> Self {
+        Locked {
+            inner: spin::Mutex::new(inner),
+        }
+    }
+
+    pub fn lock(&self) -> spin::MutexGuard<'_, A> {
+        self.inner.lock()
+    }
+}
+
+/// Align the given address `addr` upwards to alignment `align`.
+///
+/// Requires that `align` be a power of two.
+fn align_up(addr: usize, align: usize) -> usize {
+    // this do the same thing:
+    // let remainder = addr % align;
+    // if remainder == 0 {
+    //     addr // addr already aligned
+    // } else {
+    //     addr - remainder + align
+    // }
+    // i just don't fully understand this one yet
+    (addr + align - 1) & !(align - 1)
 }
