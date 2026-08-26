@@ -12,7 +12,10 @@ use alloc::{
     rc::{self, Rc},
     vec,
 };
-use blog_os::allocator;
+use blog_os::{
+    allocator,
+    task::{Task, executor::Executor, keyboard, simple_executor::SimpleExecutor},
+};
 
 mod serial;
 mod vga_buffer;
@@ -50,11 +53,25 @@ fn kernel_main(boot_info: &'static bootloader::BootInfo) -> ! {
     core::mem::drop(ref_counted);
     println!("ref count is {} now", Rc::strong_count(&clone_ref));
 
+    let mut executor = Executor::new();
+    executor.spawn(Task::new(example_task()));
+    executor.spawn(Task::new(keyboard::print_keypresses()));
+    executor.run();
+
     #[cfg(test)]
     test_main();
 
     println!("it didn't crash!");
     blog_os::hlt_loop();
+}
+
+async fn async_number() -> u32 {
+    42
+}
+
+async fn example_task() {
+    let number = async_number().await;
+    println!("async number: {}", number);
 }
 
 #[cfg(not(test))]
