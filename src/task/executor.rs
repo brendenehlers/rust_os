@@ -1,8 +1,8 @@
 use super::{Task, TaskId};
 use alloc::{collections::BTreeMap, sync::Arc, task::Wake};
-use core::{arch::x86_64, task::Waker};
-use crossbeam_queue::ArrayQueue;
 use core::task::{Context, Poll};
+use core::task::Waker;
+use crossbeam_queue::ArrayQueue;
 
 pub struct Executor {
     tasks: BTreeMap<TaskId, Task>,
@@ -12,15 +12,15 @@ pub struct Executor {
 
 impl Executor {
     pub fn new() -> Self {
-        Executor { 
+        Executor {
             tasks: BTreeMap::new(),
             task_queue: Arc::new(ArrayQueue::new(100)),
-            waker_cache: BTreeMap::new() 
+            waker_cache: BTreeMap::new(),
         }
     }
 
     pub fn spawn(&mut self, task: Task) {
-        let task_id = task.id;    
+        let task_id = task.id;
         if self.tasks.insert(task.id, task).is_some() {
             panic!("task with same ID already in tasks")
         }
@@ -60,7 +60,6 @@ impl Executor {
                 }
                 Poll::Pending => {}
             }
-
         }
     }
 
@@ -74,7 +73,12 @@ impl Executor {
             interrupts::enable();
         }
     }
-    
+}
+
+impl Default for Executor {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 struct TaskWaker {
@@ -84,7 +88,7 @@ struct TaskWaker {
 
 impl TaskWaker {
     fn wake_task(&self) {
-        self.task_queue.push(self.task_id).expect("task_queue full");   
+        self.task_queue.push(self.task_id).expect("task_queue full");
     }
 
     fn new(task_id: TaskId, task_queue: Arc<ArrayQueue<TaskId>>) -> Waker {

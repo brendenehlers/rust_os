@@ -1,4 +1,7 @@
-use core::{pin::Pin, task::{Context, Poll}};
+use core::{
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 use conquer_once::spin::OnceCell;
 use crossbeam_queue::ArrayQueue;
@@ -7,14 +10,14 @@ use futures_util::stream::StreamExt;
 use futures_util::task::AtomicWaker;
 use pc_keyboard;
 
-use crate::{println, print};
+use crate::{print, println};
 
 static SCANCODE_QUEUE: OnceCell<ArrayQueue<u8>> = OnceCell::uninit();
 static WAKER: AtomicWaker = AtomicWaker::new();
 
 pub(crate) fn add_scancode(scancode: u8) {
     if let Ok(queue) = SCANCODE_QUEUE.try_get() {
-        if let Err(_) = queue.push(scancode) {
+        if queue.push(scancode).is_err() {
             println!("WARNING: scancode queue full; dropping keyboard input");
         } else {
             WAKER.wake();
@@ -37,9 +40,15 @@ impl ScancodeStream {
     }
 }
 
+impl Default for ScancodeStream {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Stream for ScancodeStream {
     type Item = u8;
-    
+
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<u8>> {
         let queue = SCANCODE_QUEUE.try_get().expect("not initialized");
 
@@ -48,12 +57,12 @@ impl Stream for ScancodeStream {
             return Poll::Ready(Some(scancode));
         }
 
-        WAKER.register(&cx.waker());
+        WAKER.register(cx.waker());
         match queue.pop() {
             Some(scancode) => {
                 WAKER.take();
                 Poll::Ready(Some(scancode))
-            },
+            }
             None => Poll::Pending,
         }
     }
@@ -61,17 +70,19 @@ impl Stream for ScancodeStream {
 
 pub async fn print_keypresses() {
     let mut scancodes = ScancodeStream::new();
-    let mut keyboard = pc_keyboard::Keyboard::new(pc_keyboard::ScancodeSet1::new(),
-        pc_keyboard::layouts::Us104Key, pc_keyboard::HandleControl::Ignore);
+    let mut keyboard = pc_keyboard::Keyboard::new(
+        pc_keyboard::ScancodeSet1::new(),
+        pc_keyboard::layouts::Us104Key,
+        pc_keyboard::HandleControl::Ignore,
+    );
 
     while let Some(scancode) = scancodes.next().await {
-        if let Ok(Some(key_event)) = keyboard.add_byte(scancode) {
-            if let Some(key) = keyboard.process_keyevent(key_event) {
+        if let Ok(Some(key_event)) = keyboard.add_byte(scancode)
+            && let Some(key) = keyboard.process_keyevent(key_event) {
                 match key {
                     pc_keyboard::DecodedKey::Unicode(character) => print!("{}", character),
                     pc_keyboard::DecodedKey::RawKey(key) => print!("{:?}", key),
                 }
             }
-        }
     }
 }

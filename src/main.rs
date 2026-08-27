@@ -14,7 +14,7 @@ use alloc::{
 };
 use blog_os::{
     allocator,
-    task::{Task, executor::Executor, keyboard, simple_executor::SimpleExecutor},
+    task::{Task, executor::Executor, keyboard},
 };
 
 mod serial;
@@ -53,16 +53,14 @@ fn kernel_main(boot_info: &'static bootloader::BootInfo) -> ! {
     core::mem::drop(ref_counted);
     println!("ref count is {} now", Rc::strong_count(&clone_ref));
 
+    #[cfg(test)]
+    test_main();
+
     let mut executor = Executor::new();
     executor.spawn(Task::new(example_task()));
     executor.spawn(Task::new(keyboard::print_keypresses()));
     executor.run();
 
-    #[cfg(test)]
-    test_main();
-
-    println!("it didn't crash!");
-    blog_os::hlt_loop();
 }
 
 async fn async_number() -> u32 {

@@ -1,9 +1,13 @@
-use core::{future, pin, sync::atomic::{AtomicU64, Ordering}, task};
 use alloc::boxed;
+use core::{
+    future, pin,
+    sync::atomic::{AtomicU64, Ordering},
+    task,
+};
 
+pub mod executor;
 pub mod keyboard;
 pub mod simple_executor;
-pub mod executor;
 
 pub struct Task {
     id: TaskId,
@@ -31,5 +35,4 @@ impl TaskId {
         static NEXT_ID: AtomicU64 = AtomicU64::new(0);
         TaskId(NEXT_ID.fetch_add(1, Ordering::Relaxed))
     }
-
 }
