@@ -53,8 +53,23 @@ fn kernel_main(boot_info: &'static bootloader::BootInfo) -> ! {
     core::mem::drop(ref_counted);
     println!("ref count is {} now", Rc::strong_count(&clone_ref));
 
-    thread::spawn_c(thread_a);
-    thread::spawn_c(thread_b);
+    thread::spawn(|| {
+        let mut i = 0;
+        loop {
+            println!("thread a ran {} times", i);
+            i += 1;
+            for _ in 0..1000000 {}
+
+        }
+    });
+    thread::spawn(|| {
+        let mut i = 0;
+        loop {
+            println!("thread b ran {} times", i);
+            i += 1;
+            for _ in 0..1000000 {}
+        }
+    });
     println!("back in kernel_main");
 
     #[cfg(test)]

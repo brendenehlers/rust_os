@@ -10,20 +10,38 @@ use crate::println;
 #[derive(Debug)]
 pub struct Thread {
     pub stack_pointer: *mut u8,
-    pub stack: Option<Box<Stack>>, // None -> bootloader stack
+    _stack: Option<Box<Stack>>, // None -> bootloader stack
+}
+
+extern "C" fn thread_shim<F: FnOnce() + Send + 'static>(arg: *mut u8) -> ! {
+    let f = unsafe { Box::from_raw(arg as *mut F) };
+    f();
+
+    loop { yield_now(); }
 }
 
 impl Thread {
     // creates a new thread that needs to be written to before running.
     pub fn bootstrap() -> Self {
-        Self { stack_pointer: core::ptr::null_mut(), stack: None }
+        Self { stack_pointer: core::ptr::null_mut(), _stack: None }
     }
 
     /// private helper function to create a new thread
     fn new_c(entry: extern "C" fn() -> !) -> Self {
-        let mut stack = Stack::forge(entry as usize as u64);
+        let mut stack = Stack::forge(entry as usize as u64, 0);
         let stack_pointer = &mut stack.0[SP_INDEX] as *mut u64 as *mut u8;
-        Self { stack_pointer, stack: Some(stack) }
+        Self { stack_pointer, _stack: Some(stack) }
+    }
+
+    /// creates a new thread struct with the entry function wrapped in an
+    /// `extern "C"` wrapper shim so the entry is picked up when the thread
+    /// is run
+    fn new<F: FnOnce() + Send + 'static>(f: F) -> Self {
+        let arg = Box::into_raw(Box::new(f)) as *mut u8;
+        let entry = thread_shim::<F> as *const () as u64;
+        let mut stack = Stack::forge(entry, arg as u64);
+        let stack_pointer = &mut stack.0[SP_INDEX] as *mut u64 as *mut u8;
+        Thread { stack_pointer, _stack: Some(stack) }
     }
 }
 
@@ -32,21 +50,35 @@ unsafe impl Send for Thread {}
 
 // externally-available function to create a new thread on the scheduler
 pub fn spawn_c(entry: extern "C" fn() -> !) {
-    let new_thread = Box::new(Thread::new_c(entry));
-    SCHEDULER.try_get().expect("thread scheduler not init")
-        .lock()
-        .queue
-        .push_back(new_thread);
+    let t = Box::new(Thread::new_c(entry));
+    interrupts::without_interrupts(|| {
+        SCHEDULER.try_get().expect("thread scheduler not init")
+            .lock()
+            .queue
+            .push_back(t);
+    });
+}
+
+/// Creates a new thread on the scheduler running the provided function
+pub fn spawn<F: FnOnce() + Send + 'static>(f: F) {
+    let t = Box::new(Thread::new(f));
+    interrupts::without_interrupts(|| {
+        SCHEDULER.try_get().expect("thread scheduler not init")
+            .lock()
+            .queue
+            .push_back(t);
+    });
 }
 
 const STACK_SLOTS: usize = 2_048; // 16kib stack
 const SP_INDEX: usize = STACK_SLOTS - 8;
+const R13_INDEX: usize = SP_INDEX + 2;
 const R12_INDEX: usize = SP_INDEX + 3;
 const ENTRY_INDEX: usize = SP_INDEX + 6;
 
 #[repr(align(16))]
 #[derive(Debug)]
-pub struct Stack(pub [u64; STACK_SLOTS]);
+struct Stack([u64; STACK_SLOTS]);
 
 impl Stack {
     /// pop r15
@@ -56,7 +88,7 @@ impl Stack {
     /// pop rbx
     /// pop rbp
     /// ret
-    fn forge(entry_ptr: u64) -> Box<Self> {
+    fn forge(entry_ptr: u64, arg: u64) -> Box<Self> {
         let layout = Layout::new::<Stack>();
         // set stack to zeros so we don't have messed up data initially
         let stack_ptr = unsafe { alloc_zeroed(layout) } as *mut Stack;
@@ -73,6 +105,8 @@ impl Stack {
 
         // set the r12 register used by thread_entry_trampoline
         stack.0[R12_INDEX] = entry_ptr;
+        // set arbitrary data into r13 for the trampoline
+        stack.0[R13_INDEX] = arg;
 
         // set the entrypoint that's used by `ret`
         let trampoline_ptr = thread_entry_trampoline as *const() as usize as u64;
@@ -113,6 +147,7 @@ pub unsafe extern "C" fn switch_context(old: *mut *mut u8, new: *mut u8) {
 unsafe extern "C" fn thread_entry_trampoline() -> ! {
     naked_asm!(
         "sti",
+        "mov rdi, r13",
         "jmp r12",
     )
 }
