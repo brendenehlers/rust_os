@@ -82,6 +82,12 @@ impl Stack {
     }
 }
 
+/// Switches from one thread to another using the stack pointers provided as args
+///
+/// # Safety
+///
+/// This function is unsafe because the caller has to ensure that the old and new ptrs
+/// are actual stack pointers.
 #[unsafe(naked)]
 pub unsafe extern "C" fn switch_context(old: *mut *mut u8, new: *mut u8) {
     naked_asm!(
@@ -104,7 +110,7 @@ pub unsafe extern "C" fn switch_context(old: *mut *mut u8, new: *mut u8) {
 }
 
 #[unsafe(naked)]
-pub unsafe extern "C" fn thread_entry_trampoline() -> ! {
+unsafe extern "C" fn thread_entry_trampoline() -> ! {
     naked_asm!(
         "sti",
         "jmp r12",

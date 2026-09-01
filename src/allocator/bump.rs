@@ -32,6 +32,12 @@ impl BumpAllocator {
     }
 }
 
+impl Default for BumpAllocator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 unsafe impl GlobalAlloc for allocator::Locked<BumpAllocator> {
     unsafe fn alloc(&self, layout: core::alloc::Layout) -> *mut u8 {
         let mut bump = self.lock();

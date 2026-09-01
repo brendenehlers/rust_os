@@ -13,9 +13,8 @@ use alloc::{
     vec,
 };
 use blog_os::{
-    allocator, task::{Task, executor::Executor, keyboard}, thread::{self, Thread, yield_now},
+    allocator, task::{Task, executor::Executor, keyboard}, thread::{self},
 };
-use x86_64::instructions::interrupts;
 
 mod serial;
 mod vga_buffer;

@@ -53,6 +53,12 @@ impl FixedSizeBlockAllocator {
     }
 }
 
+impl Default for FixedSizeBlockAllocator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Choose an appropriate block size for the given layout
 ///
 /// Returns an index into the `BLOCK_SIZES` array

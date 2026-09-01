@@ -6,7 +6,6 @@
 
 use core::panic;
 
-use bootloader::BootInfo;
 
 extern crate alloc;
 
