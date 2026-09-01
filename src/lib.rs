@@ -6,7 +6,6 @@
 
 use core::panic;
 
-
 extern crate alloc;
 
 pub mod allocator;
@@ -52,8 +51,8 @@ pub fn test_panic_handler(info: &panic::PanicInfo) -> ! {
 bootloader::entry_point!(test_kernel_main);
 
 #[cfg(test)]
-fn test_kernel_main(_boot_info: &'static bootloader::BootInfo) -> ! {
-    init();
+fn test_kernel_main(boot_info: &'static bootloader::BootInfo) -> ! {
+    init(boot_info);
     test_main();
     hlt_loop();
 }
@@ -80,7 +79,15 @@ pub fn exit_qemu(exit_code: QemuExitCode) {
     }
 }
 
-pub fn init() {
+pub fn init(boot_info: &'static bootloader::BootInfo) {
+    let phys_mem_offset = x86_64::VirtAddr::new(boot_info.physical_memory_offset);
+    let mut mapper = unsafe { memory::init(phys_mem_offset) };
+    let mut frame_allocator =
+        unsafe { memory::BootInfoFrameAllocator::init(&boot_info.memory_map) };
+    allocator::init_heap(&mut mapper, &mut frame_allocator).expect("heap initialization failed");
+    // must come after allocator but before interrupts
+    thread::init();
+
     gdt::init();
     interrupts::init_idt();
     unsafe { interrupts::PICS.lock().initialize() };

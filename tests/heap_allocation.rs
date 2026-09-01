@@ -17,7 +17,7 @@ use blog_os::{
 bootloader::entry_point!(main);
 
 fn main(boot_info: &'static bootloader::BootInfo) -> ! {
-    blog_os::init();
+    blog_os::init(boot_info);
     let phys_mem_offset = x86_64::VirtAddr::new(boot_info.physical_memory_offset);
     let mut mapper = unsafe { memory::init(phys_mem_offset) };
     let mut frame_allocator =
