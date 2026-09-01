@@ -1,7 +1,7 @@
 use pic8259::ChainedPics;
 use x86_64::structures::idt;
 
-use crate::{gdt, hlt_loop, panic, println};
+use crate::{gdt, hlt_loop, panic, println, thread::yield_now};
 
 lazy_static::lazy_static! {
     static ref IDT: idt::InterruptDescriptorTable = {
@@ -50,11 +50,12 @@ extern "x86-interrupt" fn page_fault_handler(
 }
 
 extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: idt::InterruptStackFrame) {
-    // print!(".");
     unsafe {
         PICS.lock()
             .notify_end_of_interrupt(InterruptIndex::Timer.as_u8());
     }
+
+    yield_now();
 }
 
 extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: idt::InterruptStackFrame) {

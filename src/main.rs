@@ -4,7 +4,7 @@
 #![test_runner(blog_os::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
-use core::panic;
+use core::{panic};
 
 extern crate alloc;
 
@@ -13,9 +13,9 @@ use alloc::{
     vec,
 };
 use blog_os::{
-    allocator,
-    task::{Task, executor::Executor, keyboard}, thread::Thread,
+    allocator, task::{Task, executor::Executor, keyboard}, thread::{self, Thread, yield_now},
 };
+use x86_64::instructions::interrupts;
 
 mod serial;
 mod vga_buffer;
@@ -25,15 +25,16 @@ bootloader::entry_point!(kernel_main);
 fn kernel_main(boot_info: &'static bootloader::BootInfo) -> ! {
     use blog_os::memory;
 
-    println!("hello, world{}", "!");
-    blog_os::init();
-
     let phys_mem_offset = x86_64::VirtAddr::new(boot_info.physical_memory_offset);
     let mut mapper = unsafe { memory::init(phys_mem_offset) };
     let mut frame_allocator =
         unsafe { memory::BootInfoFrameAllocator::init(&boot_info.memory_map) };
-
     allocator::init_heap(&mut mapper, &mut frame_allocator).expect("heap initialization failed");
+
+    thread::init();
+
+    println!("hello, world{}", "!");
+    blog_os::init();
 
     let heap_value = alloc::boxed::Box::new(41);
     println!("heap_value at {:p}", heap_value);
@@ -53,10 +54,9 @@ fn kernel_main(boot_info: &'static bootloader::BootInfo) -> ! {
     core::mem::drop(ref_counted);
     println!("ref count is {} now", Rc::strong_count(&clone_ref));
 
-    let thread = Thread::spawn_c(test_thread);
-    println!("test_thread at: {:#x}", test_thread as usize);
-    println!("entry: {:#x}", thread.stack.0[2046]);
-    println!("stack pointer: {:#x}", thread.stack_pointer as usize);
+    thread::spawn_c(thread_a);
+    thread::spawn_c(thread_b);
+    println!("back in kernel_main");
 
     #[cfg(test)]
     test_main();
@@ -77,9 +77,23 @@ async fn example_task() {
     println!("async number: {}", number);
 }
 
-extern "C" fn test_thread() -> ! {
-    println!("i do nothing!");
-    loop {}
+extern "C" fn thread_a() -> ! {
+    let mut i = 0;
+    loop {
+        println!("thread a ran {} times", i);
+        i += 1;
+        for _ in 0..1000000 {}
+
+    }
+}
+
+extern "C" fn thread_b() -> ! {
+    let mut i = 0;
+    loop {
+        println!("thread b ran {} times", i);
+        i += 1;
+        for _ in 0..1000000 {}
+    }
 }
 
 #[cfg(not(test))]

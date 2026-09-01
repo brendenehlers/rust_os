@@ -6,6 +6,8 @@
 
 use core::panic;
 
+use bootloader::BootInfo;
+
 extern crate alloc;
 
 pub mod allocator;
@@ -84,6 +86,8 @@ pub fn init() {
     interrupts::init_idt();
     unsafe { interrupts::PICS.lock().initialize() };
     x86_64::instructions::interrupts::enable();
+
+    // init heap
 }
 
 pub fn hlt_loop() -> ! {

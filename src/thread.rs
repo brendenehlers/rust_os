@@ -1,24 +1,48 @@
-use core::alloc::Layout;
+use core::{alloc::Layout, arch::naked_asm, mem};
 
-use alloc::{alloc::{alloc_zeroed, handle_alloc_error}, boxed::Box};
+use alloc::{alloc::{alloc_zeroed, handle_alloc_error}, boxed::Box, collections::VecDeque};
+use conquer_once::spin::OnceCell;
+use spin::Mutex;
+use x86_64::instructions::interrupts;
+
+use crate::println;
 
 #[derive(Debug)]
 pub struct Thread {
     pub stack_pointer: *mut u8,
-    pub stack: Box<Stack>, // keeps the memory reference to the stack alive
+    pub stack: Option<Box<Stack>>, // None -> bootloader stack
 }
 
 impl Thread {
-    pub fn spawn_c(entry: extern "C" fn() -> !) -> Self {
+    // creates a new thread that needs to be written to before running.
+    pub fn bootstrap() -> Self {
+        Self { stack_pointer: core::ptr::null_mut(), stack: None }
+    }
+
+    /// private helper function to create a new thread
+    fn new_c(entry: extern "C" fn() -> !) -> Self {
         let mut stack = Stack::forge(entry as usize as u64);
         let stack_pointer = &mut stack.0[SP_INDEX] as *mut u64 as *mut u8;
-        Self { stack_pointer, stack: stack }
+        Self { stack_pointer, stack: Some(stack) }
     }
+}
+
+// just trust me bro it's send
+unsafe impl Send for Thread {}
+
+// externally-available function to create a new thread on the scheduler
+pub fn spawn_c(entry: extern "C" fn() -> !) {
+    let new_thread = Box::new(Thread::new_c(entry));
+    SCHEDULER.try_get().expect("thread scheduler not init")
+        .lock()
+        .queue
+        .push_back(new_thread);
 }
 
 const STACK_SLOTS: usize = 2_048; // 16kib stack
 const SP_INDEX: usize = STACK_SLOTS - 8;
-const ENTRY_INDEX: usize = STACK_SLOTS - 2;
+const R12_INDEX: usize = SP_INDEX + 3;
+const ENTRY_INDEX: usize = SP_INDEX + 6;
 
 #[repr(align(16))]
 #[derive(Debug)]
@@ -47,9 +71,99 @@ impl Stack {
         let sp = &stack.0[SP_INDEX] as *const u64 as usize;
         assert_eq!(sp % 16, 0);
 
+        // set the r12 register used by thread_entry_trampoline
+        stack.0[R12_INDEX] = entry_ptr;
+
         // set the entrypoint that's used by `ret`
-        stack.0[ENTRY_INDEX] = entry_ptr;
+        let trampoline_ptr = thread_entry_trampoline as *const() as usize as u64;
+        stack.0[ENTRY_INDEX] = trampoline_ptr;
 
         stack
     }
+}
+
+#[unsafe(naked)]
+pub unsafe extern "C" fn switch_context(old: *mut *mut u8, new: *mut u8) {
+    naked_asm!(
+        "push rbp",
+        "push rbx",
+        "push r12",
+        "push r13",
+        "push r14",
+        "push r15",
+        "mov [rdi], rsp", // rdi automatically stores the first function arg
+        "mov rsp, rsi", // rsi automatically stores the second function arg
+        "pop r15",
+        "pop r14",
+        "pop r13",
+        "pop r12",
+        "pop rbx",
+        "pop rbp",
+        "ret",
+    );
+}
+
+#[unsafe(naked)]
+pub unsafe extern "C" fn thread_entry_trampoline() -> ! {
+    naked_asm!(
+        "sti",
+        "jmp r12",
+    )
+}
+
+struct Scheduler {
+    pub current: Box<Thread>,
+    pub queue: VecDeque<Box<Thread>>,
+    _private: (), // prevents creating this struct outside this module
+}
+
+static SCHEDULER: OnceCell<Mutex<Scheduler>> = OnceCell::uninit();
+
+impl Scheduler {
+    fn init() {
+        SCHEDULER
+            .try_init_once(|| {
+                Mutex::new(Scheduler { 
+                    current: Box::new(Thread::bootstrap()),
+                    queue: VecDeque::new(),
+                    _private: (),
+                })
+            })
+            .expect("failed to init thread scheduler");
+        println!("thread scheduler initialized");
+    }
+
+}
+
+pub fn yield_now() {
+    interrupts::without_interrupts(|| {
+        let (old_sp, new_sp) = {
+            let mut scheduler = SCHEDULER
+                .try_get()
+                .expect("failed to acquire the thread scheduler")
+                .lock();
+
+            let next = scheduler.queue.pop_front();
+            let old = match next {
+                Some(next) => mem::replace(&mut scheduler.current, next),
+                None => return // nothing to switch to
+            };
+            scheduler.queue.push_back(old);
+            // unwrap safe here bc we just pushed the element to the back
+            let old_sp = &mut scheduler
+                .queue
+                .back_mut()
+                .unwrap()
+                .stack_pointer as *mut *mut u8;
+            let new_sp = scheduler.current.stack_pointer;
+            (old_sp, new_sp)
+        };
+
+        // we MUST drop the lock on SCHEDULER before calling switch_context
+        unsafe { switch_context(old_sp, new_sp); }
+    });
+}
+
+pub fn init() {
+    Scheduler::init();
 }
