@@ -9,3 +9,11 @@ build-release:
 
 run:
     qemu-system-x86_64 -drive format=raw,file=target/x86_64-blog_os/debug/bootimage-blog_os.bin
+
+debug:
+    qemu-system-x86_64 \
+      -drive format=raw,file=target/x86_64-blog_os/debug/bootimage-blog_os.bin \
+      -serial stdio \
+      -no-reboot \
+      -d int,cpu_reset \
+      -D qemu.log

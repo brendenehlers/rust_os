@@ -14,7 +14,7 @@ use alloc::{
 };
 use blog_os::{
     allocator,
-    task::{Task, executor::Executor, keyboard},
+    task::{Task, executor::Executor, keyboard}, thread::Thread,
 };
 
 mod serial;
@@ -53,6 +53,11 @@ fn kernel_main(boot_info: &'static bootloader::BootInfo) -> ! {
     core::mem::drop(ref_counted);
     println!("ref count is {} now", Rc::strong_count(&clone_ref));
 
+    let thread = Thread::spawn_c(test_thread);
+    println!("test_thread at: {:#x}", test_thread as usize);
+    println!("entry: {:#x}", thread.stack.0[2046]);
+    println!("stack pointer: {:#x}", thread.stack_pointer as usize);
+
     #[cfg(test)]
     test_main();
 
@@ -70,6 +75,11 @@ async fn async_number() -> u32 {
 async fn example_task() {
     let number = async_number().await;
     println!("async number: {}", number);
+}
+
+extern "C" fn test_thread() -> ! {
+    println!("i do nothing!");
+    loop {}
 }
 
 #[cfg(not(test))]
