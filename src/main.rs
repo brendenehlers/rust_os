@@ -22,25 +22,6 @@ fn kernel_main(boot_info: &'static bootloader::BootInfo) -> ! {
     println!("hello, world{}", "!");
     blog_os::init(boot_info);
 
-    // thread::spawn(|| {
-    //     let mut i = 0;
-    //     loop {
-    //         println!("thread a ran {} times", i);
-    //         i += 1;
-    //         for _ in 0..1000000 {}
-    //
-    //     }
-    // });
-    // thread::spawn(|| {
-    //     let mut i = 0;
-    //     loop {
-    //         println!("thread b ran {} times", i);
-    //         i += 1;
-    //         for _ in 0..1000000 {}
-    //     }
-    // });
-    // println!("back in kernel_main");
-
     #[cfg(test)]
     test_main();
 

@@ -10,7 +10,16 @@ use crate::println;
 #[derive(Debug)]
 pub struct Thread {
     pub stack_pointer: *mut u8,
+    pub status: ThreadStatus,
+
+    // saves a reference to the stack in memory so it's not deallocated
     _stack: Option<Box<Stack>>, // None -> bootloader stack
+}
+
+#[derive(Debug)]
+pub enum ThreadStatus {
+    Ready,
+    Running,
 }
 
 extern "C" fn thread_shim<F: FnOnce() + Send + 'static>(arg: *mut u8) -> ! {
@@ -23,14 +32,22 @@ extern "C" fn thread_shim<F: FnOnce() + Send + 'static>(arg: *mut u8) -> ! {
 impl Thread {
     // creates a new thread that needs to be written to before running.
     pub fn bootstrap() -> Self {
-        Self { stack_pointer: core::ptr::null_mut(), _stack: None }
+        Self { 
+            stack_pointer: core::ptr::null_mut(), 
+            status: ThreadStatus::Running, // bootloader thread is already running
+            _stack: None 
+        }
     }
 
     /// private helper function to create a new thread
     fn new_c(entry: extern "C" fn() -> !) -> Self {
         let mut stack = Stack::forge(entry as usize as u64, 0);
         let stack_pointer = &mut stack.0[SP_INDEX] as *mut u64 as *mut u8;
-        Self { stack_pointer, _stack: Some(stack) }
+        Self { 
+            stack_pointer, 
+            status: ThreadStatus::Ready,
+            _stack: Some(stack) 
+        }
     }
 
     /// creates a new thread struct with the entry function wrapped in an
@@ -41,7 +58,11 @@ impl Thread {
         let entry = thread_shim::<F> as *const () as u64;
         let mut stack = Stack::forge(entry, arg as u64);
         let stack_pointer = &mut stack.0[SP_INDEX] as *mut u64 as *mut u8;
-        Thread { stack_pointer, _stack: Some(stack) }
+        Thread { 
+            stack_pointer, 
+            status: ThreadStatus::Ready,
+            _stack: Some(stack) 
+        }
     }
 }
 
@@ -116,14 +137,43 @@ impl Stack {
     }
 }
 
+/// Yields the currently executing thread so another thread can work.
+pub fn yield_now() {
+    interrupts::without_interrupts(|| {
+        let (old_sp, new_sp) = {
+            let mut scheduler = SCHEDULER
+                .try_get()
+                .expect("failed to acquire the thread scheduler")
+                .lock();
+
+            let next = scheduler.queue.pop_front();
+            let mut old = match next {
+                Some(mut next) => {
+                    next.status = ThreadStatus::Running;
+                    mem::replace(&mut scheduler.current, next)
+                },
+                None => return // nothing to switch to
+            };
+            old.status = ThreadStatus::Ready;
+            scheduler.queue.push_back(old);
+            // unwrap safe here bc we just pushed the element to the back
+            let old_sp = &mut scheduler
+                .queue
+                .back_mut()
+                .unwrap()
+                .stack_pointer as *mut *mut u8;
+            let new_sp = scheduler.current.stack_pointer;
+            (old_sp, new_sp)
+        };
+
+        // we MUST drop the lock on SCHEDULER before calling switch_context
+        unsafe { switch_context(old_sp, new_sp); }
+    });
+}
+
 /// Switches from one thread to another using the stack pointers provided as args
-///
-/// # Safety
-///
-/// This function is unsafe because the caller has to ensure that the old and new ptrs
-/// are actual stack pointers.
 #[unsafe(naked)]
-pub unsafe extern "C" fn switch_context(old: *mut *mut u8, new: *mut u8) {
+unsafe extern "C" fn switch_context(old: *mut *mut u8, new: *mut u8) {
     naked_asm!(
         "push rbp",
         "push rbx",
@@ -174,35 +224,6 @@ impl Scheduler {
         println!("thread scheduler initialized");
     }
 
-}
-
-pub fn yield_now() {
-    interrupts::without_interrupts(|| {
-        let (old_sp, new_sp) = {
-            let mut scheduler = SCHEDULER
-                .try_get()
-                .expect("failed to acquire the thread scheduler")
-                .lock();
-
-            let next = scheduler.queue.pop_front();
-            let old = match next {
-                Some(next) => mem::replace(&mut scheduler.current, next),
-                None => return // nothing to switch to
-            };
-            scheduler.queue.push_back(old);
-            // unwrap safe here bc we just pushed the element to the back
-            let old_sp = &mut scheduler
-                .queue
-                .back_mut()
-                .unwrap()
-                .stack_pointer as *mut *mut u8;
-            let new_sp = scheduler.current.stack_pointer;
-            (old_sp, new_sp)
-        };
-
-        // we MUST drop the lock on SCHEDULER before calling switch_context
-        unsafe { switch_context(old_sp, new_sp); }
-    });
 }
 
 pub fn init() {

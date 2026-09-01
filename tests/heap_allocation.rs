@@ -10,19 +10,13 @@ use core::panic;
 
 use alloc::{boxed::Box, vec::Vec};
 use blog_os::{
-    allocator::{self, HEAP_SIZE},
-    memory,
+    allocator::{HEAP_SIZE},
 };
 
 bootloader::entry_point!(main);
 
 fn main(boot_info: &'static bootloader::BootInfo) -> ! {
     blog_os::init(boot_info);
-    let phys_mem_offset = x86_64::VirtAddr::new(boot_info.physical_memory_offset);
-    let mut mapper = unsafe { memory::init(phys_mem_offset) };
-    let mut frame_allocator =
-        unsafe { memory::BootInfoFrameAllocator::init(&boot_info.memory_map) };
-    allocator::init_heap(&mut mapper, &mut frame_allocator).expect("heap init failed");
 
     test_main();
     loop {}
