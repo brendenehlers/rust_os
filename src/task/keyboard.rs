@@ -1,6 +1,5 @@
 use core::{
-    pin::Pin,
-    task::{Context, Poll},
+    pin::Pin, sync::atomic::{AtomicBool, Ordering}, task::{Context, Poll},
 };
 
 use conquer_once::spin::OnceCell;
@@ -10,7 +9,7 @@ use futures_util::stream::StreamExt;
 use futures_util::task::AtomicWaker;
 use pc_keyboard;
 
-use crate::{print, println};
+use crate::{SHUTDOWN, exit_qemu, print, println};
 
 static SCANCODE_QUEUE: OnceCell<ArrayQueue<u8>> = OnceCell::uninit();
 static WAKER: AtomicWaker = AtomicWaker::new();
@@ -68,7 +67,7 @@ impl Stream for ScancodeStream {
     }
 }
 
-pub async fn print_keypresses() {
+pub async fn handle_scancodes() {
     let mut scancodes = ScancodeStream::new();
     let mut keyboard = pc_keyboard::Keyboard::new(
         pc_keyboard::ScancodeSet1::new(),
@@ -80,7 +79,13 @@ pub async fn print_keypresses() {
         if let Ok(Some(key_event)) = keyboard.add_byte(scancode)
             && let Some(key) = keyboard.process_keyevent(key_event) {
                 match key {
-                    pc_keyboard::DecodedKey::Unicode(character) => print!("{}", character),
+                    pc_keyboard::DecodedKey::Unicode(character) => {
+                        if character == '\x1b' {
+                            SHUTDOWN.store(true, Ordering::Relaxed);
+                        } else {
+                            print!("{}", character)
+                        }
+                    }
                     pc_keyboard::DecodedKey::RawKey(key) => print!("{:?}", key),
                 }
             }

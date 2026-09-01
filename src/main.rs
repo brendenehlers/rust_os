@@ -4,12 +4,12 @@
 #![test_runner(blog_os::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
-use core::{panic};
+use core::{panic, sync::atomic::Ordering};
 
 extern crate alloc;
 
 use blog_os::{
-    task::{Task, executor::Executor, keyboard}, thread::{self, yield_now},
+    SHUTDOWN, exit_qemu, task::{Task, executor::Executor, keyboard}, thread::{self, yield_now},
 };
 
 mod serial;
@@ -27,11 +27,17 @@ fn kernel_main(boot_info: &'static bootloader::BootInfo) -> ! {
 
     thread::spawn(|| {
         let mut executor = Executor::new();
-        executor.spawn(Task::new(keyboard::print_keypresses()));
+        executor.spawn(Task::new(keyboard::handle_scancodes()));
         executor.run();
     });
 
-    loop { yield_now(); }
+    loop { 
+        if SHUTDOWN.load(Ordering::Relaxed) {
+            serial_println!("goodbye");
+            exit_qemu(blog_os::QemuExitCode::Success);
+        }
+        yield_now(); 
+    }
 }
 
 #[cfg(not(test))]

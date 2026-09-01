@@ -4,7 +4,7 @@
 #![test_runner(crate::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
-use core::panic;
+use core::{panic, sync::atomic::AtomicBool};
 
 extern crate alloc;
 
@@ -16,6 +16,8 @@ pub mod serial;
 pub mod task;
 pub mod vga_buffer;
 pub mod thread;
+
+pub static SHUTDOWN: AtomicBool = AtomicBool::new(false);
 
 pub trait Testable {
     fn run(&self) -> ();
