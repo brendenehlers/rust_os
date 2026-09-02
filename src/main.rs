@@ -31,6 +31,8 @@ fn kernel_main(boot_info: &'static bootloader::BootInfo) -> ! {
         executor.run();
     });
 
+    thread::spawn(|| { println!("i ran") });
+
     loop { 
         if SHUTDOWN.load(Ordering::Relaxed) {
             serial_println!("goodbye");

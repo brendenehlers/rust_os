@@ -16,16 +16,26 @@ pub struct Thread {
     _stack: Option<Box<Stack>>, // None -> bootloader stack
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum ThreadStatus {
     Ready,
     Running,
+    Finished,
 }
 
 extern "C" fn thread_shim<F: FnOnce() + Send + 'static>(arg: *mut u8) -> ! {
     let f = unsafe { Box::from_raw(arg as *mut F) };
     f();
+    thread_exit();
+}
 
+fn thread_exit() -> ! {
+    interrupts::without_interrupts(|| {
+        SCHEDULER.try_get().expect("thread scheduled not init")
+            .lock()
+            .current
+            .status = ThreadStatus::Finished;
+    });
     loop { yield_now(); }
 }
 
@@ -146,7 +156,25 @@ pub fn yield_now() {
                 .expect("failed to acquire the thread scheduler")
                 .lock();
 
-            let next = scheduler.queue.pop_front();
+            // find next ready thread and drop any finished threads
+            // TODO: move this into own function
+            let mut next: Option<Box<Thread>> = None;
+            while let Some(n) = scheduler.queue.pop_front() {
+                match n.status {
+                    ThreadStatus::Ready => {
+                        next = Some(n);
+                        break;
+                    }
+                    ThreadStatus::Finished => {
+                        // drop the finished thread, thus freeing the stack
+                        drop(n);
+                    }
+                    ThreadStatus::Running => {
+                        panic!("more than one thread in running state");
+                    }
+                }
+            }
+
             let mut old = match next {
                 Some(mut next) => {
                     next.status = ThreadStatus::Running;
@@ -154,7 +182,10 @@ pub fn yield_now() {
                 },
                 None => return // nothing to switch to
             };
-            old.status = ThreadStatus::Ready;
+
+            if old.status != ThreadStatus::Finished {
+                old.status = ThreadStatus::Ready;
+            }
             scheduler.queue.push_back(old);
             // unwrap safe here bc we just pushed the element to the back
             let old_sp = &mut scheduler
