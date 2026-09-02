@@ -1,11 +1,8 @@
-use core::{alloc::Layout, arch::naked_asm, mem};
+use core::{alloc::Layout, arch::naked_asm};
 
 use alloc::{alloc::{alloc_zeroed, handle_alloc_error}, boxed::Box};
-use x86_64::instructions::interrupts;
 
 mod scheduler;
-
-use scheduler::{Scheduler, SCHEDULER};
 
 #[derive(Debug)]
 pub struct Thread {
@@ -33,12 +30,7 @@ extern "C" fn thread_shim<F: FnOnce() + Send + 'static>(arg: *mut u8) -> ! {
 }
 
 fn thread_exit() -> ! {
-    interrupts::without_interrupts(|| {
-        SCHEDULER.try_get().expect("thread scheduler not init")
-            .lock()
-            .current
-            .status = ThreadStatus::Finished;
-    });
+    scheduler::finish_current();
     loop { yield_now(); }
 }
 
@@ -85,23 +77,13 @@ unsafe impl Send for Thread {}
 // externally-available function to create a new thread on the scheduler
 pub fn spawn_c(entry: extern "C" fn() -> !) {
     let t = Box::new(Thread::new_c(entry));
-    interrupts::without_interrupts(|| {
-        SCHEDULER.try_get().expect("thread scheduler not init")
-            .lock()
-            .queue
-            .push_back(t);
-    });
+    scheduler::enqueue(t);
 }
 
 /// Creates a new thread on the scheduler running the provided function
 pub fn spawn<F: FnOnce() + Send + 'static>(f: F) {
     let t = Box::new(Thread::new(f));
-    interrupts::without_interrupts(|| {
-        SCHEDULER.try_get().expect("thread scheduler not init")
-            .lock()
-            .queue
-            .push_back(t);
-    });
+    scheduler::enqueue(t);
 }
 
 const STACK_SLOTS: usize = 2_048; // 16kib stack
@@ -152,57 +134,7 @@ impl Stack {
 
 /// Yields the currently executing thread so another thread can work.
 pub fn yield_now() {
-    interrupts::without_interrupts(|| {
-        let (old_sp, new_sp) = {
-            let mut scheduler = SCHEDULER
-                .try_get()
-                .expect("failed to acquire the thread scheduler")
-                .lock();
-
-            // find next ready thread and drop any finished threads
-            // TODO: move this into own function
-            let mut next: Option<Box<Thread>> = None;
-            while let Some(n) = scheduler.queue.pop_front() {
-                match n.status {
-                    ThreadStatus::Ready => {
-                        next = Some(n);
-                        break;
-                    }
-                    ThreadStatus::Finished => {
-                        // drop the finished thread, thus freeing the stack
-                        drop(n);
-                    }
-                    ThreadStatus::Running => {
-                        panic!("more than one thread in running state");
-                    }
-                }
-            }
-
-            let mut old = match next {
-                Some(mut next) => {
-                    next.status = ThreadStatus::Running;
-                    mem::replace(&mut scheduler.current, next)
-                },
-                None => return // nothing to switch to
-            };
-
-            if old.status != ThreadStatus::Finished {
-                old.status = ThreadStatus::Ready;
-            }
-            scheduler.queue.push_back(old);
-            // unwrap safe here bc we just pushed the element to the back
-            let old_sp = &mut scheduler
-                .queue
-                .back_mut()
-                .unwrap()
-                .stack_pointer as *mut *mut u8;
-            let new_sp = scheduler.current.stack_pointer;
-            (old_sp, new_sp)
-        };
-
-        // we MUST drop the lock on SCHEDULER before calling switch_context
-        unsafe { switch_context(old_sp, new_sp); }
-    });
+    scheduler::yield_now();
 }
 
 /// Switches from one thread to another using the stack pointers provided as args
@@ -238,5 +170,5 @@ unsafe extern "C" fn thread_entry_trampoline() -> ! {
 
 
 pub fn init() {
-    Scheduler::init();
+    scheduler::init();
 }
