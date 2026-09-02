@@ -1,11 +1,11 @@
 use core::{alloc::Layout, arch::naked_asm, mem};
 
-use alloc::{alloc::{alloc_zeroed, handle_alloc_error}, boxed::Box, collections::VecDeque};
-use conquer_once::spin::OnceCell;
-use spin::Mutex;
+use alloc::{alloc::{alloc_zeroed, handle_alloc_error}, boxed::Box};
 use x86_64::instructions::interrupts;
 
-use crate::println;
+mod scheduler;
+
+use scheduler::{Scheduler, SCHEDULER};
 
 #[derive(Debug)]
 pub struct Thread {
@@ -236,29 +236,6 @@ unsafe extern "C" fn thread_entry_trampoline() -> ! {
     )
 }
 
-struct Scheduler {
-    pub current: Box<Thread>,
-    pub queue: VecDeque<Box<Thread>>,
-    _private: (), // prevents creating this struct outside this module
-}
-
-static SCHEDULER: OnceCell<Mutex<Scheduler>> = OnceCell::uninit();
-
-impl Scheduler {
-    fn init() {
-        SCHEDULER
-            .try_init_once(|| {
-                Mutex::new(Scheduler { 
-                    current: Box::new(Thread::bootstrap()),
-                    queue: VecDeque::new(),
-                    _private: (),
-                })
-            })
-            .expect("failed to init thread scheduler");
-        println!("thread scheduler initialized");
-    }
-
-}
 
 pub fn init() {
     Scheduler::init();
