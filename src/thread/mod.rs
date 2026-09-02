@@ -9,10 +9,13 @@ use crate::println;
 
 #[derive(Debug)]
 pub struct Thread {
-    pub stack_pointer: *mut u8,
-    pub status: ThreadStatus,
+    status: ThreadStatus,
 
-    // saves a reference to the stack in memory so it's not deallocated
+    // pointer within `_stack` to the current frame of execution
+    stack_pointer: *mut u8,
+
+    // a `Thread` maintains the reference to the stack on the heap
+    // so the stack is dealloced when the thread goes out of scope
     _stack: Option<Box<Stack>>, // None -> bootloader stack
 }
 
@@ -31,7 +34,7 @@ extern "C" fn thread_shim<F: FnOnce() + Send + 'static>(arg: *mut u8) -> ! {
 
 fn thread_exit() -> ! {
     interrupts::without_interrupts(|| {
-        SCHEDULER.try_get().expect("thread scheduled not init")
+        SCHEDULER.try_get().expect("thread scheduler not init")
             .lock()
             .current
             .status = ThreadStatus::Finished;
@@ -76,7 +79,7 @@ impl Thread {
     }
 }
 
-// just trust me bro it's send
+// SAFETY: `Thread` owns the stack allocation exclusively. 
 unsafe impl Send for Thread {}
 
 // externally-available function to create a new thread on the scheduler

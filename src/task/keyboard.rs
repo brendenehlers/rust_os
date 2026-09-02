@@ -1,5 +1,5 @@
 use core::{
-    pin::Pin, sync::atomic::{AtomicBool, Ordering}, task::{Context, Poll},
+    pin::Pin, sync::atomic::Ordering, task::{Context, Poll},
 };
 
 use conquer_once::spin::OnceCell;
@@ -9,7 +9,7 @@ use futures_util::stream::StreamExt;
 use futures_util::task::AtomicWaker;
 use pc_keyboard;
 
-use crate::{SHUTDOWN, exit_qemu, print, println};
+use crate::{SHUTDOWN, print, println};
 
 static SCANCODE_QUEUE: OnceCell<ArrayQueue<u8>> = OnceCell::uninit();
 static WAKER: AtomicWaker = AtomicWaker::new();
