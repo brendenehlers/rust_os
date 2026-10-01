@@ -9,4 +9,4 @@ members = ["kernel"]
 
 [build-dependencies]
 bootloader = "0.11.17"
-blog_os = { path = "kernel", artifact = "bin", target = "x86_64-unknown-none" }
+kernel = { package = "blog_os", path = "kernel", artifact = "bin", target = "x86_64-unknown-none" }

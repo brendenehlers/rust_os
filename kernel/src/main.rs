@@ -20,7 +20,10 @@ mod vga_buffer;
 bootloader_api::entry_point!(kernel_main, config = &blog_os::BOOTLOADER_CONFIG);
 
 fn kernel_main(boot_info: &'static mut bootloader_api::BootInfo) -> ! {
-    println!("hello, world{}", "!");
+    serial_println!("hello, world{}", "!");
+    // TODO remove this loop
+    loop {}
+
     blog_os::init(boot_info);
 
     #[cfg(test)]

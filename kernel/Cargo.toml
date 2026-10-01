@@ -12,7 +12,8 @@ test-timeout = 600 # seconds
 # tells rustanalyzer to skip checks against the test
 # and bench package targets
 [[bin]]
-name = "blog_os"
+name = "kernel"
+path = "src/main.rs"
 test = true
 bench = false
 
