@@ -1,0 +1,12 @@
+[package]
+name = "os"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+resolver = "3"
+members = ["kernel"]
+
+[build-dependencies]
+bootloader = "0.11.17"
+blog_os = { path = "kernel", artifact = "bin", target = "x86_64-unknown-none" }
