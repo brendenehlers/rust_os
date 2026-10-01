@@ -4,6 +4,7 @@
 #![test_runner(crate::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
+use bootloader_api::{BootInfo, BootloaderConfig, config::Mapping};
 use core::{panic, sync::atomic::AtomicBool};
 
 extern crate alloc;
@@ -14,10 +15,18 @@ pub mod interrupts;
 pub mod memory;
 pub mod serial;
 pub mod task;
-pub mod vga_buffer;
 pub mod thread;
+pub mod vga_buffer;
 
 pub static SHUTDOWN: AtomicBool = AtomicBool::new(false);
+
+/// Bootloader config shared by every kernel entry point.
+/// `memory::init` needs all of physical memory mapped at an offset.
+pub static BOOTLOADER_CONFIG: BootloaderConfig = {
+    let mut config = BootloaderConfig::new_default();
+    config.mappings.physical_memory = Some(Mapping::Dynamic);
+    config
+};
 
 pub trait Testable {
     fn run(&self) -> ();
@@ -50,10 +59,10 @@ pub fn test_panic_handler(info: &panic::PanicInfo) -> ! {
 }
 
 #[cfg(test)]
-bootloader::entry_point!(test_kernel_main);
+bootloader_api::entry_point!(test_kernel_main, config = &BOOTLOADER_CONFIG);
 
 #[cfg(test)]
-fn test_kernel_main(boot_info: &'static bootloader::BootInfo) -> ! {
+fn test_kernel_main(boot_info: &'static mut BootInfo) -> ! {
     init(boot_info);
     test_main();
     hlt_loop();
@@ -81,11 +90,14 @@ pub fn exit_qemu(exit_code: QemuExitCode) {
     }
 }
 
-pub fn init(boot_info: &'static bootloader::BootInfo) {
-    let phys_mem_offset = x86_64::VirtAddr::new(boot_info.physical_memory_offset);
-    let mut mapper = unsafe { memory::init(phys_mem_offset) };
+pub fn init(boot_info: &'static mut BootInfo) {
+    let phys_mem_offset = boot_info
+        .physical_memory_offset
+        .into_option()
+        .expect("physical memory not mapped; use BOOTLOADER_CONFIG");
+    let mut mapper = unsafe { memory::init(x86_64::VirtAddr::new(phys_mem_offset)) };
     let mut frame_allocator =
-        unsafe { memory::BootInfoFrameAllocator::init(&boot_info.memory_map) };
+        unsafe { memory::BootInfoFrameAllocator::init(&boot_info.memory_regions) };
     allocator::init_heap(&mut mapper, &mut frame_allocator).expect("heap initialization failed");
     // must come after allocator but before interrupts
     thread::init();

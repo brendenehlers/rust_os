@@ -8,8 +8,9 @@ use core::panic;
 
 use blog_os::println;
 
-#[unsafe(no_mangle)]
-pub extern "C" fn _start() -> ! {
+bootloader_api::entry_point!(main);
+
+fn main(_boot_info: &'static mut bootloader_api::BootInfo) -> ! {
     test_main();
 
     loop {}

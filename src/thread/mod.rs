@@ -1,6 +1,9 @@
 use core::{alloc::Layout, arch::naked_asm};
 
-use alloc::{alloc::{alloc_zeroed, handle_alloc_error}, boxed::Box};
+use alloc::{
+    alloc::{alloc_zeroed, handle_alloc_error},
+    boxed::Box,
+};
 
 mod scheduler;
 
@@ -31,16 +34,18 @@ extern "C" fn thread_shim<F: FnOnce() + Send + 'static>(arg: *mut u8) -> ! {
 
 fn thread_exit() -> ! {
     scheduler::finish_current();
-    loop { yield_now(); }
+    loop {
+        yield_now();
+    }
 }
 
 impl Thread {
     // creates a new thread that needs to be written to before running.
     pub fn bootstrap() -> Self {
-        Self { 
-            stack_pointer: core::ptr::null_mut(), 
+        Self {
+            stack_pointer: core::ptr::null_mut(),
             status: ThreadStatus::Running, // bootloader thread is already running
-            _stack: None 
+            _stack: None,
         }
     }
 
@@ -48,10 +53,10 @@ impl Thread {
     fn new_c(entry: extern "C" fn() -> !) -> Self {
         let mut stack = Stack::forge(entry as usize as u64, 0);
         let stack_pointer = &mut stack.0[SP_INDEX] as *mut u64 as *mut u8;
-        Self { 
-            stack_pointer, 
+        Self {
+            stack_pointer,
             status: ThreadStatus::Ready,
-            _stack: Some(stack) 
+            _stack: Some(stack),
         }
     }
 
@@ -63,15 +68,15 @@ impl Thread {
         let entry = thread_shim::<F> as *const () as u64;
         let mut stack = Stack::forge(entry, arg as u64);
         let stack_pointer = &mut stack.0[SP_INDEX] as *mut u64 as *mut u8;
-        Thread { 
-            stack_pointer, 
+        Thread {
+            stack_pointer,
             status: ThreadStatus::Ready,
-            _stack: Some(stack) 
+            _stack: Some(stack),
         }
     }
 }
 
-// SAFETY: `Thread` owns the stack allocation exclusively. 
+// SAFETY: `Thread` owns the stack allocation exclusively.
 unsafe impl Send for Thread {}
 
 // externally-available function to create a new thread on the scheduler
@@ -112,9 +117,7 @@ impl Stack {
             handle_alloc_error(layout);
         }
 
-        let mut stack = unsafe {
-            Box::from_raw(stack_ptr)
-        };
+        let mut stack = unsafe { Box::from_raw(stack_ptr) };
 
         let sp = &stack.0[SP_INDEX] as *const u64 as usize;
         assert_eq!(sp % 16, 0);
@@ -125,7 +128,7 @@ impl Stack {
         stack.0[R13_INDEX] = arg;
 
         // set the entrypoint that's used by `ret`
-        let trampoline_ptr = thread_entry_trampoline as *const() as usize as u64;
+        let trampoline_ptr = thread_entry_trampoline as *const () as usize as u64;
         stack.0[ENTRY_INDEX] = trampoline_ptr;
 
         stack
@@ -148,7 +151,7 @@ unsafe extern "C" fn switch_context(old: *mut *mut u8, new: *mut u8) {
         "push r14",
         "push r15",
         "mov [rdi], rsp", // rdi automatically stores the first function arg
-        "mov rsp, rsi", // rsi automatically stores the second function arg
+        "mov rsp, rsi",   // rsi automatically stores the second function arg
         "pop r15",
         "pop r14",
         "pop r13",
@@ -161,13 +164,8 @@ unsafe extern "C" fn switch_context(old: *mut *mut u8, new: *mut u8) {
 
 #[unsafe(naked)]
 unsafe extern "C" fn thread_entry_trampoline() -> ! {
-    naked_asm!(
-        "sti",
-        "mov rdi, r13",
-        "jmp r12",
-    )
+    naked_asm!("sti", "mov rdi, r13", "jmp r12",)
 }
-
 
 pub fn init() {
     scheduler::init();

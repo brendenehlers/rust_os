@@ -9,16 +9,17 @@ use core::{panic, sync::atomic::Ordering};
 extern crate alloc;
 
 use blog_os::{
-    SHUTDOWN, exit_qemu, task::{Task, executor::Executor, keyboard}, thread::{self, yield_now},
+    SHUTDOWN, exit_qemu,
+    task::{Task, executor::Executor, keyboard},
+    thread::{self, yield_now},
 };
 
 mod serial;
 mod vga_buffer;
 
-bootloader::entry_point!(kernel_main);
+bootloader_api::entry_point!(kernel_main, config = &blog_os::BOOTLOADER_CONFIG);
 
-fn kernel_main(boot_info: &'static bootloader::BootInfo) -> ! {
-
+fn kernel_main(boot_info: &'static mut bootloader_api::BootInfo) -> ! {
     println!("hello, world{}", "!");
     blog_os::init(boot_info);
 
@@ -31,22 +32,13 @@ fn kernel_main(boot_info: &'static bootloader::BootInfo) -> ! {
         executor.run();
     });
 
-    thread::spawn(|| { 
-        call_me(0);
-    });
-
-    loop { 
+    loop {
         if SHUTDOWN.load(Ordering::Relaxed) {
             serial_println!("goodbye");
             exit_qemu(blog_os::QemuExitCode::Success);
         }
-        yield_now(); 
+        yield_now();
     }
-}
-
-fn call_me(i: usize) {
-    println!("{}", i);
-    call_me(i + 1);
 }
 
 #[cfg(not(test))]

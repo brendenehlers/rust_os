@@ -18,7 +18,7 @@ checksum = "b588b76d00fde79687d7646a9b5bdf3cc0f655e0bbd080335a95d7e96f3587da"
 name = "blog_os"
 version = "0.1.0"
 dependencies = [
- "bootloader",
+ "bootloader_api",
  "conquer-once",
  "crossbeam-queue",
  "futures-util",
@@ -33,10 +33,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "bootloader"
-version = "0.9.35"
+name = "bootloader_api"
+version = "0.11.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e22d5a0b9e11dd5bee9d24a68885de6dc7ed367f897323b1c1286150fd469374"
+checksum = "49f4c2ef60a76c1858ef43c30b6b95c2f5ee4d7c4f9bc47409c3a8dc8910adb9"
 
 [[package]]
 name = "conquer-once"

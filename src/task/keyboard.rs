@@ -1,5 +1,7 @@
 use core::{
-    pin::Pin, sync::atomic::Ordering, task::{Context, Poll},
+    pin::Pin,
+    sync::atomic::Ordering,
+    task::{Context, Poll},
 };
 
 use conquer_once::spin::OnceCell;
@@ -77,17 +79,18 @@ pub async fn handle_scancodes() {
 
     while let Some(scancode) = scancodes.next().await {
         if let Ok(Some(key_event)) = keyboard.add_byte(scancode)
-            && let Some(key) = keyboard.process_keyevent(key_event) {
-                match key {
-                    pc_keyboard::DecodedKey::Unicode(character) => {
-                        if character == '\x1b' {
-                            SHUTDOWN.store(true, Ordering::Relaxed);
-                        } else {
-                            print!("{}", character)
-                        }
+            && let Some(key) = keyboard.process_keyevent(key_event)
+        {
+            match key {
+                pc_keyboard::DecodedKey::Unicode(character) => {
+                    if character == '\x1b' {
+                        SHUTDOWN.store(true, Ordering::Relaxed);
+                    } else {
+                        print!("{}", character)
                     }
-                    pc_keyboard::DecodedKey::RawKey(key) => print!("{:?}", key),
                 }
+                pc_keyboard::DecodedKey::RawKey(key) => print!("{:?}", key),
             }
+        }
     }
 }

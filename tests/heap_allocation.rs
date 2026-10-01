@@ -9,13 +9,11 @@ extern crate alloc;
 use core::panic;
 
 use alloc::{boxed::Box, vec::Vec};
-use blog_os::{
-    allocator::{HEAP_SIZE},
-};
+use blog_os::allocator::HEAP_SIZE;
 
-bootloader::entry_point!(main);
+bootloader_api::entry_point!(main, config = &blog_os::BOOTLOADER_CONFIG);
 
-fn main(boot_info: &'static bootloader::BootInfo) -> ! {
+fn main(boot_info: &'static mut bootloader_api::BootInfo) -> ! {
     blog_os::init(boot_info);
 
     test_main();

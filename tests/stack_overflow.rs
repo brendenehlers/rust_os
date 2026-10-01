@@ -7,8 +7,9 @@ use core::panic;
 use blog_os::{exit_qemu, serial_print};
 use x86_64::structures::idt;
 
-#[unsafe(no_mangle)]
-pub extern "C" fn _start() -> ! {
+bootloader_api::entry_point!(main);
+
+fn main(_boot_info: &'static mut bootloader_api::BootInfo) -> ! {
     serial_print!("stack_overflow::stack_overflow...\t");
 
     blog_os::gdt::init();
