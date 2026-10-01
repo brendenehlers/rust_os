@@ -1,16 +1,25 @@
 use x86_64::structures::{gdt, tss};
 
 pub const DOUBLE_FAULT_IST_INDEX: u16 = 0;
+pub const PAGE_FAULT_IST_INDEX: u16 = 1;
+
+const STACK_SIZE: usize = 4096 * 5;
+
+#[allow(unused)]
+#[repr(align(16))]
+struct GdtStack([u8; STACK_SIZE]);
 
 lazy_static::lazy_static! {
     static ref TSS: tss::TaskStateSegment =  {
         let mut tss = tss::TaskStateSegment::new();
         tss.interrupt_stack_table[DOUBLE_FAULT_IST_INDEX as usize] = {
-            const STACK_SIZE: usize = 4096 * 5;
-            static mut STACK: [u8; STACK_SIZE] = [0; STACK_SIZE];
-
-            let stack_start = x86_64::VirtAddr::from_ptr(&raw const STACK);
-
+            static mut DOUBLE_FAULT_STACK: GdtStack = GdtStack([0; STACK_SIZE]);
+            let stack_start = x86_64::VirtAddr::from_ptr(&raw const DOUBLE_FAULT_STACK);
+            stack_start + STACK_SIZE as u64
+        };
+        tss.interrupt_stack_table[PAGE_FAULT_IST_INDEX as usize] = {
+            static mut PAGE_FAULT_STACK: GdtStack = GdtStack([0; STACK_SIZE]);
+            let stack_start = x86_64::VirtAddr::from_ptr(&raw const PAGE_FAULT_STACK);
             stack_start + STACK_SIZE as u64
         };
         tss

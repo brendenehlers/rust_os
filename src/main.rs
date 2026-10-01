@@ -31,7 +31,9 @@ fn kernel_main(boot_info: &'static bootloader::BootInfo) -> ! {
         executor.run();
     });
 
-    thread::spawn(|| { println!("i ran") });
+    thread::spawn(|| { 
+        call_me(0);
+    });
 
     loop { 
         if SHUTDOWN.load(Ordering::Relaxed) {
@@ -40,6 +42,11 @@ fn kernel_main(boot_info: &'static bootloader::BootInfo) -> ! {
         }
         yield_now(); 
     }
+}
+
+fn call_me(i: usize) {
+    println!("{}", i);
+    call_me(i + 1);
 }
 
 #[cfg(not(test))]

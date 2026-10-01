@@ -10,8 +10,9 @@ lazy_static::lazy_static! {
         unsafe {
             idt.double_fault.set_handler_fn(double_fault_handler)
                 .set_stack_index(gdt::DOUBLE_FAULT_IST_INDEX);
+            idt.page_fault.set_handler_fn(page_fault_handler)
+                .set_stack_index(gdt::PAGE_FAULT_IST_INDEX);
         }
-        idt.page_fault.set_handler_fn(page_fault_handler);
         idt[InterruptIndex::Timer.as_u8()]
             .set_handler_fn(timer_interrupt_handler);
         idt[InterruptIndex::Keyboard.as_u8()]
